@@ -1,15 +1,11 @@
-import json, random, time, pathlib, html, re, datetime as dt
+import json, random, time, pathlib, html, re, datetime as dt, hashlib, secrets
 import streamlit as st
 import streamlit.components.v1 as components
 import os
 import requests
+from html.parser import HTMLParser
 
-try:
-    from bs4 import BeautifulSoup  # type: ignore[import-not-found]
-except ImportError:
-    BeautifulSoup = None
-
-st.set_page_config(page_title="Customs laws", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="HujjatUstasi", page_icon="⚖️", layout="wide")
 B = pathlib.Path(__file__).parent
 DF = B / "documents.json"
 PF = B / "progress.json"
@@ -58,30 +54,60 @@ def save_documents(docs):
 DOCS = load_documents()
 BYK = {d["key"]: d for d in DOCS}
 
-# ---------- TAHLIL FUNKSIYALARI ----------
-MODEL = "claude-sonnet-5"
+# ---------- TAHLIL FUNKSIYALARI (Google Gemini — bepul) ----------
+MODEL = "gemini-flash-latest"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 
 def doc_info(d):
     o, k = ORGAN.get(d["tur"], ("—", "—"))
     return {"Qabul qilgan organ": o, "Yuridik kuchi": k, "Qabul qilingan": d["sana"],
             "Hujjat yoshi": f"{dt.date.today().year - d['yil']} yil" if d["yil"] else "—"}
 
+class _PageTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"script", "style", "nav", "header", "footer"}:
+            self.skip += 1
+
+    def handle_endtag(self, tag):
+        if tag in {"script", "style", "nav", "header", "footer"} and self.skip:
+            self.skip -= 1
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.parts.append(data)
+
 def fetch_text(url, limit=45000):
     if not url or "/pdfs/" in url: return None
     try:
         r = requests.get(url, timeout=25, headers={"User-Agent": "Mozilla/5.0"})
-        s = BeautifulSoup(r.text, "html.parser")
-        for t in s(["script", "style", "nav", "header", "footer"]): t.decompose()
-        txt = re.sub(r"\s+", " ", s.get_text(" ")).strip()
+        parser = _PageTextParser()
+        parser.feed(r.text)
+        txt = re.sub(r"\s+", " ", " ".join(parser.parts)).strip()
         return txt[:limit] if len(txt) > 500 else None
     except Exception:
         return None
 
-def _claude(key, prompt, max_tokens=2500):
-    import anthropic
-    c = anthropic.Anthropic(api_key=key)
-    m = c.messages.create(model=MODEL, max_tokens=max_tokens, messages=[{"role": "user", "content": prompt}])
-    return "".join(b.text for b in m.content if b.type == "text")
+def _gemini(key, prompt, max_tokens=2500):
+    r = requests.post(
+        GEMINI_URL,
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}],
+              "generationConfig": {"maxOutputTokens": max_tokens}},
+        timeout=60,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"Gemini xatosi {r.status_code}: {r.text[:300]}")
+    data = r.json()
+    cands = data.get("candidates") or []
+    if not cands:
+        raise RuntimeError(f"Gemini bo'sh javob qaytardi: {json.dumps(data, ensure_ascii=False)[:300]}")
+    parts = cands[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts).strip()
 
 def analyze(d, key, text=None):
     text = text or fetch_text(d.get("link"))
@@ -93,7 +119,7 @@ Faqat matnda bor narsaga tayan, o'ylab topma. Faqat JSON qaytar (izohsiz, ``` be
 "nima_haqida" (2-3 jumla), "maqsad", "asosiy_qoidalar" (5-8 ta punkt, aniq raqam/muddat/stavkalar bilan),
 "kimlarga_tegishli", "amaliy_ahamiyat" (bojxona amaliyotida nima o'zgaradi), "muhim_raqamlar_muddatlar" (ro'yxat),
 "boglangan_hujjatlar" (matnda tilga olingan), "xavf_va_nuanslar", "yodlash_maslahati" (qisqa mnemonika), "ogohlantirish" (matn olinmagan bo'lsa yoki noaniq joylar)"""
-    raw = _claude(key, p).strip()
+    raw = _gemini(key, p).strip()
     raw = re.sub(r"^```(?:json)?|```$", "", raw).strip()
     return json.loads(raw)
 
@@ -118,19 +144,36 @@ HUJJATLAR:{ctx}
 Javobni o'zbek tilida, shu bo'limlar bilan ber: 1) Qaysi hujjatlar qo'llanadi va nega (raqami bilan), 2) Amaliy qadamlar,
 3) Hujjatlardagi bo'shliq yoki o'zaro nomuvofiqliklar, 4) Takomillashtirish bo'yicha aniq takliflar, 5) Xavflar.
 Har bir fikrni qaysi hujjatga asoslanganingni ko'rsat. Bilmagan narsangni 'aniqlashtirish kerak' deb yoz. Oxirida: bu yuridik maslahat emas, rasmiy matnni lex.uz'da tekshiring."""
-    return _claude(key, p, 3500)
+    return _gemini(key, p, 3500)
+
+# ---------- FOYDALANUVCHI HISOBLARI (shaxsiy kabinet) ----------
+USERS_FILE = B / "users.json"
+
+def load_users():
+    return json.loads(USERS_FILE.read_text(encoding="utf-8")) if USERS_FILE.exists() else {}
+
+def save_users(u): USERS_FILE.write_text(json.dumps(u, ensure_ascii=False, indent=1), encoding="utf-8")
+
+def hash_pw(password, salt): return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+def empty_progress(): return {"box": {}, "fav": [], "notes": {}, "xp": 0, "hist": [], "days": {}}
+
+def load_all_progress():
+    return json.loads(PF.read_text(encoding="utf-8")) if PF.exists() else {}
+
+def save_all_progress(d): PF.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
 
 # ---------- holat ----------
 S = st.session_state
-if "P" not in S:
-    S.P = json.loads(PF.read_text()) if PF.exists() else {}
-    S.P = {"box": {}, "fav": [], "notes": {}, "xp": 0, "hist": [], "days": {}, **S.P}
-    S.update(score=0, streak=0, Q={}, qidc=0, card=0, flip=False, t0=None, ex=None,
+if "init" not in S:
+    S.update(init=True, user=None, P=None, score=0, streak=0, Q={}, qidc=0, card=0, flip=False, t0=None, ex=None,
              section="👥 Foydalanuvchi", page="🏠 Bosh sahifa", is_admin=False)
 P = S.P
 today = str(dt.date.today())
 
-def save(): PF.write_text(json.dumps(P, ensure_ascii=False))
+def save():
+    if not S.user: return
+    allp = load_all_progress(); allp[S.user] = P; save_all_progress(allp)
 def box(d): return P["box"].get(d["key"], 0)
 def learned(d): return box(d) >= 4
 def short(t, n=80): return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "…"
@@ -177,7 +220,7 @@ def linkbtn(d):
 # ============================================================
 # SIDEBAR: FOYDALANUVCHI / ADMIN TANLOVI
 # ============================================================
-st.sidebar.title("⚖️ Customs laws")
+st.sidebar.title("⚖️ HujjatUstasi")
 S.section = st.sidebar.radio("Kirish turi", ["👥 Foydalanuvchi", "🔑 Admin"],
                               index=["👥 Foydalanuvchi", "🔑 Admin"].index(S.section))
 
@@ -266,6 +309,59 @@ if S.section == "🔑 Admin":
 # FOYDALANUVCHI QISMI
 # ============================================================
 else:
+    # ---------- KIRISH / RO'YXATDAN O'TISH ----------
+    if not S.user:
+        st.markdown("<div class='hero'><h1>⚖️ Customs Laws</h1><p>Shaxsiy kabinetingizga kiring — testlar, o'yinlar va natijalaringiz saqlanib boradi</p></div>", unsafe_allow_html=True)
+        tL, tR = st.tabs(["🔑 Kirish", "🆕 Ro'yxatdan o'tish"])
+        with tL:
+            with st.form("login_form"):
+                lu = st.text_input("Foydalanuvchi nomi")
+                lp = st.text_input("Parol", type="password")
+                if st.form_submit_button("Kirish", type="primary", use_container_width=True):
+                    uname = lu.strip().lower()
+                    users = load_users()
+                    rec = users.get(uname)
+                    if rec and rec["hash"] == hash_pw(lp, rec["salt"]):
+                        S.user = uname
+                        S.P = load_all_progress().get(uname, empty_progress())
+                        S.score = 0; S.streak = 0; S.Q = {}
+                        st.rerun()
+                    else:
+                        st.error("❌ Foydalanuvchi nomi yoki parol noto'g'ri.")
+        with tR:
+            with st.form("register_form"):
+                ru = st.text_input("Foydalanuvchi nomi (lotin harf/raqam)", placeholder="masalan: ali_2026")
+                rp = st.text_input("Parol (kamida 4 belgi)", type="password")
+                rp2 = st.text_input("Parolni takrorlang", type="password")
+                if st.form_submit_button("Ro'yxatdan o'tish", type="primary", use_container_width=True):
+                    uname = re.sub(r"[^a-z0-9_]", "", ru.strip().lower())
+                    users = load_users()
+                    if not uname or not rp:
+                        st.error("Barcha maydonlarni to'ldiring.")
+                    elif uname != ru.strip().lower():
+                        st.error("Foydalanuvchi nomida faqat lotin harflari, raqam va pastki chiziq bo'lishi mumkin.")
+                    elif uname in users:
+                        st.error("Bu foydalanuvchi nomi band, boshqa nom tanlang.")
+                    elif len(rp) < 4:
+                        st.error("Parol kamida 4 ta belgidan iborat bo'lsin.")
+                    elif rp != rp2:
+                        st.error("Parollar bir xil emas.")
+                    else:
+                        salt = secrets.token_hex(8)
+                        users[uname] = {"hash": hash_pw(rp, salt), "salt": salt, "created": today}
+                        save_users(users)
+                        allp = load_all_progress(); allp[uname] = empty_progress(); save_all_progress(allp)
+                        S.user = uname; S.P = empty_progress(); S.score = 0; S.streak = 0; S.Q = {}
+                        st.success("✅ Ro'yxatdan o'tdingiz! Endi kirdingiz.")
+                        st.rerun()
+        st.stop()
+
+    P = S.P
+    st.sidebar.success(f"👤 {S.user}")
+    if st.sidebar.button("🚪 Chiqish", key="user_logout"):
+        S.user = None; S.P = None; st.rerun()
+    st.sidebar.divider()
+
     PAGES = ["🏠 Bosh sahifa", "📖 Ro'yxat", "🃏 Flashcards", "🎮 O'yinlar", "📊 Statistika", "🔍 Tahlil", "💡 Takliflar"]
     S.page = st.sidebar.radio("Bo'lim", PAGES, index=PAGES.index(S.page) if S.page in PAGES else 0)
     st.sidebar.markdown(f"**{level()}-daraja · {TITLES[min(level() - 1, 7)]}**")
@@ -312,7 +408,7 @@ else:
 
     # ================= BOSH SAHIFA =================
     if S.page == PAGES[0]:
-        st.markdown("<div class='hero'><h1>⚖️ Customs laws</h1><p>Normativ-huquqiy hujjatlarni o'ynab, oson va tez yodlang</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='hero'><h1>⚖️ HujjatUstasi</h1><p>Normativ-huquqiy hujjatlarni o'ynab, oson va tez yodlang</p></div>", unsafe_allow_html=True)
         n = P["days"].get(today, 0)
         c = st.columns(4)
         for col, (v, l) in zip(c, [(len(DOCS), "Jami hujjat"), (lc, "O'zlashtirilgan"), (f"{n}/20", "Bugungi maqsad"), (level(), "Daraja")]):
@@ -493,13 +589,16 @@ else:
         st.subheader("😅 Eng qiyin 10 ta hujjat")
         for d in sorted(DOCS, key=box)[:10]: st.markdown(card(d), unsafe_allow_html=True)
         if P["hist"]: st.subheader("Natijalar tarixi"); st.dataframe(P["hist"][::-1], use_container_width=True)
-        st.download_button("⬇️ Progressni yuklab olish", json.dumps(P, ensure_ascii=False), "progress.json")
-        if st.button("🗑 Progressni tozalash"): PF.unlink(missing_ok=True); del S["P"]; st.rerun()
+        st.download_button("⬇️ Progressni yuklab olish", json.dumps(P, ensure_ascii=False), f"progress_{S.user}.json")
+        if st.button("🗑 Progressni tozalash"):
+            S.P = empty_progress()
+            allp = load_all_progress(); allp[S.user] = S.P; save_all_progress(allp)
+            st.rerun()
 
     # ================= TAHLIL =================
     elif S.page == PAGES[5]:
         st.title("🔍 Hujjat tahlili")
-        KEY = os.environ.get("ANTHROPIC_API_KEY") or st.sidebar.text_input("Anthropic API kaliti", type="password")
+        KEY = os.environ.get("GEMINI_API_KEY") or st.sidebar.text_input("Gemini API kaliti", type="password", help="Bepul kalitni aistudio.google.com dan oling")
         AN = load_analysis()
         d = st.selectbox("Hujjatni tanlang", DOCS, format_func=lambda x: f"{x['raqam']} — {short(x['mazmun'], 70)}")
         st.markdown(card(d), unsafe_allow_html=True); linkbtn(d)
@@ -535,7 +634,7 @@ else:
     # ================= TAKLIFLAR =================
     else:
         st.title("💡 Takliflar va huquqiy tahlil")
-        KEY = os.environ.get("ANTHROPIC_API_KEY") or st.sidebar.text_input("Anthropic API kaliti", type="password")
+        KEY = os.environ.get("GEMINI_API_KEY") or st.sidebar.text_input("Gemini API kaliti", type="password", help="Bepul kalitni aistudio.google.com dan oling")
         AN = load_analysis()
         q = st.text_area("Vaziyat, muammo yoki mavzuni yozing", placeholder="Masalan: jismoniy shaxs 6 oyda ikkinchi marta avtomobil ehtiyot qismlarini olib kirmoqchi. Qanday tartib va bojlar qo'llanadi? Qonunchilikda qanday bo'shliqlar bor?")
         auto = relevant(q, DOCS, AN) if q else []
