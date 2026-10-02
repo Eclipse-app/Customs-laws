@@ -124,7 +124,9 @@ Faqat matnda bor narsaga tayan, o'ylab topma. Faqat JSON qaytar (izohsiz, ``` be
     return json.loads(raw)
 
 def load_analysis(): return json.loads(AF.read_text(encoding="utf-8")) if AF.exists() else {}
-def store_analysis(k, v): a = load_analysis(); a[k] = v; AF.write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
+def store_analysis(k, v):
+    a = load_analysis(); a[k] = v
+    AF.write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
 
 def relevant(q, docs, an, n=6):
     w = {x for x in re.findall(r"\w{4,}", q.lower())}
@@ -182,10 +184,20 @@ TITLES = ["Yangi boshlovchi", "Izlanuvchi", "Bilimdon", "Tajribali", "Mutaxassis
 
 def answer(ok, d, mult=1):
     S.streak = S.streak + 1 if ok else 0
-    if ok: pts = (10 + min(S.streak, 8) * 2) * mult; S.score += pts; P["xp"] += pts
+    if ok:
+        pts = (10 + min(S.streak, 8) * 2) * mult
+        S.score += pts
+        P["xp"] += pts
     P["box"][d["key"]] = min(box(d) + 1, 5) if ok else 1
     P["days"][today] = P["days"].get(today, 0) + 1
     save()
+
+def show_result(ok, wrong_text, right_text="✅ To'g'ri!"):
+    """Faqat natijani chiqaradi (DeltaGenerator chiqib ketmasligi uchun if/else ishlatiladi)."""
+    if ok:
+        st.success(right_text)
+    else:
+        st.error(wrong_text)
 
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -214,8 +226,10 @@ def card(d):
             f"<div class='no'>{fl}{html.escape(d['raqam'])}</div><div class='tx'>{html.escape(d['mazmun'])}</div></div>")
 
 def linkbtn(d):
-    if d.get("link"): st.link_button("Lex.uz'da ochish ↗", d["link"], use_container_width=True)
-    else: st.caption("Havola yo'q")
+    if d.get("link"):
+        st.link_button("Lex.uz'da ochish ↗", d["link"], use_container_width=True)
+    else:
+        st.caption("Havola yo'q")
 
 # ============================================================
 # SIDEBAR: FOYDALANUVCHI / ADMIN TANLOVI
@@ -235,12 +249,15 @@ if S.section == "🔑 Admin":
         pw = st.text_input("Parolni kiriting", type="password")
         if st.button("Kirish", type="primary"):
             if pw == ADMIN_PASSWORD:
-                S.is_admin = True; st.rerun()
+                S.is_admin = True
+                st.rerun()
             else:
                 st.error("❌ Parol noto'g'ri.")
     else:
         st.sidebar.success("🔓 Admin sifatida kirdingiz")
-        if st.sidebar.button("🚪 Chiqish"): S.is_admin = False; st.rerun()
+        if st.sidebar.button("🚪 Chiqish"):
+            S.is_admin = False
+            st.rerun()
 
         st.title("🔑 Admin panel")
         st.caption(f"Jami hujjatlar: {len(DOCS)}")
@@ -359,7 +376,8 @@ else:
     P = S.P
     st.sidebar.success(f"👤 {S.user}")
     if st.sidebar.button("🚪 Chiqish", key="user_logout"):
-        S.user = None; S.P = None; st.rerun()
+        S.user = None; S.P = None
+        st.rerun()
     st.sidebar.divider()
 
     PAGES = ["🏠 Bosh sahifa", "📖 Ro'yxat", "🃏 Flashcards", "🎮 O'yinlar", "📊 Statistika", "🔍 Tahlil", "💡 Takliflar"]
@@ -396,9 +414,13 @@ else:
         cols = st.columns(2)
         for i, o in enumerate(q["op"]):
             if cols[i % 2].button(o, key=f"{qkey}_{q['qid']}_{i}", use_container_width=True, disabled=q["done"] is not None):
-                q["done"] = o; answer(o == q["ok"], q["d"], mult); st.rerun()
-        if q["done"] is None: return False
-        st.success("✅ To'g'ri!") if q["done"] == q["ok"] else st.error(f"❌ To'g'ri javob: {q['ok']}")
+                q["done"] = o
+                answer(o == q["ok"], q["d"], mult)
+                st.rerun()
+        if q["done"] is None:
+            return False
+        # FAQAT javob natijasi chiqadi (To'g'ri / Noto'g'ri)
+        show_result(q["done"] == q["ok"], f"❌ To'g'ri javob: {q['ok']}")
         st.markdown(card(q["d"]), unsafe_allow_html=True)
         return True
 
@@ -417,13 +439,19 @@ else:
         a, b = st.columns(2)
         dd = random.Random(today).choice(DOCS)
         with a:
-            st.subheader("📅 Kunlik hujjat"); st.markdown(card(dd), unsafe_allow_html=True); linkbtn(dd)
+            st.subheader("📅 Kunlik hujjat")
+            st.markdown(card(dd), unsafe_allow_html=True)
+            linkbtn(dd)
         with b:
             st.subheader("🚀 Tez boshlash")
             for lbl, pg in [("🃏 Qiynalgan hujjatlarni takrorlash", 2), ("🎮 O'yin o'ynash", 3), ("📖 Hujjatlar ro'yxati", 1)]:
-                if st.button(lbl, use_container_width=True, key="qs_" + lbl): S.page = PAGES[pg]; st.rerun()
+                if st.button(lbl, use_container_width=True, key="qs_" + lbl):
+                    S.page = PAGES[pg]
+                    st.rerun()
             if st.button("🎲 Tasodifiy hujjat", use_container_width=True, key="qs_random"):
-                r = random.choice(DOCS); st.markdown(card(r), unsafe_allow_html=True); linkbtn(r)
+                r = random.choice(DOCS)
+                st.markdown(card(r), unsafe_allow_html=True)
+                linkbtn(r)
 
     # ================= RO'YXAT =================
     elif S.page == PAGES[1]:
@@ -455,12 +483,20 @@ else:
             with cols[i % 2]:
                 st.markdown(card(d), unsafe_allow_html=True)
                 b1, b2 = st.columns(2)
-                with b1: linkbtn(d)
+                with b1:
+                    linkbtn(d)
                 if b2.button("★ Sevimli" if d["key"] not in P["fav"] else "☆ Olib tashlash", key="f" + d["key"], use_container_width=True):
-                    P["fav"].remove(d["key"]) if d["key"] in P["fav"] else P["fav"].append(d["key"]); save(); st.rerun()
+                    if d["key"] in P["fav"]:
+                        P["fav"].remove(d["key"])
+                    else:
+                        P["fav"].append(d["key"])
+                    save()
+                    st.rerun()
                 with st.expander("📝 Mening eslatmam (mnemonika)"):
                     t = st.text_area("Eslatma", P["notes"].get(d["key"], ""), key="n" + d["key"], label_visibility="collapsed")
-                    if t != P["notes"].get(d["key"], ""): P["notes"][d["key"]] = t; save()
+                    if t != P["notes"].get(d["key"], ""):
+                        P["notes"][d["key"]] = t
+                        save()
 
     # ================= FLASHCARDS =================
     elif S.page == PAGES[2]:
@@ -468,29 +504,46 @@ else:
         m = st.radio("Yo'nalish", ["Nom → Raqam", "Raqam → Nom"], horizontal=True)
         if "cd" not in S: S.cd = None
         if S.cd is None:
-            S.cd = random.choices(DOCS, weights=[6 - box(d) for d in DOCS])[0]; S.flip = False
+            S.cd = random.choices(DOCS, weights=[6 - box(d) for d in DOCS])[0]
+            S.flip = False
         d = S.cd
         front, back = (d["nom"], d["raqam"]) if m == "Nom → Raqam" else (d["raqam"], d["nom"])
         txt = f"{html.escape(back)}<br><small style='opacity:.7'>{d['tur']} · {d['sana']}</small>" if S.flip else html.escape(front)
         st.markdown(f"<div class='flash'>{txt}</div>", unsafe_allow_html=True)
         st.caption(f"Bilim darajasi: {'🟩' * box(d)}{'⬜' * (5 - box(d))}")
         c = st.columns(5)
-        if c[0].button("🔄 Aylantirish", use_container_width=True, key="fc_flip"): S.flip = not S.flip; st.rerun()
-        if c[1].button("✅ Bilaman", use_container_width=True, key="fc_know"): answer(True, d); S.cd = None; st.rerun()
-        if c[2].button("😅 Qiyin", use_container_width=True, key="fc_hard"): answer(False, d); S.cd = None; st.rerun()
-        if c[3].button("⏭ O'tkazish", use_container_width=True, key="fc_skip"): S.cd = None; st.rerun()
-        with c[4]: linkbtn(d)
+        if c[0].button("🔄 Aylantirish", use_container_width=True, key="fc_flip"):
+            S.flip = not S.flip
+            st.rerun()
+        if c[1].button("✅ Bilaman", use_container_width=True, key="fc_know"):
+            answer(True, d); S.cd = None
+            st.rerun()
+        if c[2].button("😅 Qiyin", use_container_width=True, key="fc_hard"):
+            answer(False, d); S.cd = None
+            st.rerun()
+        if c[3].button("⏭ O'tkazish", use_container_width=True, key="fc_skip"):
+            S.cd = None
+            st.rerun()
+        with c[4]:
+            linkbtn(d)
         components.html(f"<button onclick=\"var u=new SpeechSynthesisUtterance({json.dumps(d['nom'])});u.lang='ru-RU';speechSynthesis.speak(u)\" "
                         "style='padding:8px 16px;border-radius:10px;border:1px solid #888;cursor:pointer'>🔊 Ovozli o'qish</button>", height=50)
-        if P["notes"].get(d["key"]): st.info("📝 " + P["notes"][d["key"]])
+        if P["notes"].get(d["key"]):
+            st.info("📝 " + P["notes"][d["key"]])
 
     # ================= O'YINLAR =================
     elif S.page == PAGES[3]:
         st.title("🎮 O'yinlar")
         t = st.tabs(["❓ Viktorina", "✍️ Yozma", "🔗 Juftlash", "⏱ Vaqtga qarshi", "🎓 Imtihon", "🎯 Xatolar ustida"])
+
+        # ---- Viktorina ----
         with t[0]:
             ms = st.multiselect("Savol turlari", list(MODES), default=list(MODES)[:2], key="viktorina_modes") or list(MODES)
-            if quiz("v", ms) and st.button("Keyingi ➡️", type="primary", key="nv"): S.Q["v"] = None; st.rerun()
+            if quiz("v", ms) and st.button("Keyingi ➡️", type="primary", key="nv"):
+                S.Q["v"] = None
+                st.rerun()
+
+        # ---- Yozma ----
         with t[1]:
             if "w" not in S: S.w = random.choice(DOCS)
             d = S.w
@@ -498,15 +551,24 @@ else:
             ans = st.text_input("Raqam", key="wi" + str(S.get("wn", 0)))
             norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower().replace("ʻ", "").replace("‘", "").replace("'", ""))
             if st.button("Tekshirish", type="primary", key="w_check") and ans:
-                ok = norm(ans) == norm(d["raqam"]); answer(ok, d, 2)
-                st.success("✅ To'g'ri! +2x ball") if ok else st.error(f"❌ To'g'ri javob: {d['raqam']}")
+                ok = norm(ans) == norm(d["raqam"])
+                answer(ok, d, 2)
+                show_result(ok, f"❌ To'g'ri javob: {d['raqam']}", "✅ To'g'ri! +2x ball")
                 st.markdown(card(d), unsafe_allow_html=True)
-            if st.button("Keyingi ➡️", key="nw"): S.w = random.choice(DOCS); S.wn = S.get("wn", 0) + 1; st.rerun()
+            if st.button("Keyingi ➡️", key="nw"):
+                S.w = random.choice(DOCS)
+                S.wn = S.get("wn", 0) + 1
+                st.rerun()
+
+        # ---- Juftlash ----
         with t[2]:
             rev = st.radio("Yo'nalish", ["Nom → Raqam", "Raqam → Nom"], horizontal=True, key="pair_dir")
-            if "pairs" not in S: S.pairs = random.sample(DOCS, min(6, len(DOCS))); S.pk = 0
+            if "pairs" not in S:
+                S.pairs = random.sample(DOCS, min(6, len(DOCS)))
+                S.pk = 0
             L, R = ("nom", "raqam") if rev == "Nom → Raqam" else ("raqam", "nom")
-            opts = [fmt(d, R) for d in S.pairs]; random.Random(S.pk).shuffle(opts)
+            opts = [fmt(d, R) for d in S.pairs]
+            random.Random(S.pk).shuffle(opts)
             sel = {}
             for d in S.pairs:
                 a, b = st.columns([1, 1])
@@ -516,54 +578,89 @@ else:
             if c[0].button("Tekshirish", type="primary", key="pair_check"):
                 n = 0
                 for d in S.pairs:
-                    ok = sel[d["key"]] == fmt(d, R); n += ok; answer(ok, d)
+                    ok = sel[d["key"]] == fmt(d, R)
+                    n += ok
+                    answer(ok, d)
                     st.write(("✅ " if ok else f"❌ → {fmt(d, R)} | ") + fmt(d, L))
                 st.success(f"Natija: {n}/{len(S.pairs)}")
             if c[1].button("🔄 Yangi to'plam", key="pair_new"):
-                del S["pairs"]; S.pk += 1; st.rerun()
+                del S["pairs"]
+                S.pk += 1
+                st.rerun()
+
+        # ---- Vaqtga qarshi ----
         with t[3]:
             if S.t0 is None:
                 st.info("60 soniyada iloji boricha ko'p to'g'ri javob bering. Ball ×2!")
                 if st.button("▶️ Boshlash", type="primary", key="timer_start"):
-                    S.t0 = time.time(); S.s0 = S.score; S.Q["t"] = None; st.rerun()
+                    S.t0 = time.time(); S.s0 = S.score; S.Q["t"] = None
+                    st.rerun()
             else:
                 left = 60 - (time.time() - S.t0)
                 if left <= 0:
-                    st.balloons(); pts = S.score - S.s0; st.success(f"Vaqt tugadi! Ball: {pts}")
-                    P["hist"].append({"sana": today, "rejim": "Vaqtga qarshi", "ball": pts}); save()
+                    st.balloons()
+                    pts = S.score - S.s0
+                    st.success(f"Vaqt tugadi! Ball: {pts}")
+                    P["hist"].append({"sana": today, "rejim": "Vaqtga qarshi", "ball": pts})
+                    save()
                     S.t0 = None; S.Q["t"] = None
-                    if st.button("Yana o'ynash", key="timer_again"): st.rerun()
+                    if st.button("Yana o'ynash", key="timer_again"):
+                        st.rerun()
                 else:
                     st.progress(max(left, 0) / 60, text=f"⏳ {int(left)} soniya")
                     if quiz("t", list(MODES), mult=2):
-                        if st.button("Keyingi ➡️", type="primary", key="nt"): S.Q["t"] = None; st.rerun()
+                        if st.button("Keyingi ➡️", type="primary", key="nt"):
+                            S.Q["t"] = None
+                            st.rerun()
                     else:
-                        time.sleep(1); st.rerun()
+                        time.sleep(1)
+                        st.rerun()
+
+        # ---- Imtihon ----
         with t[4]:
             N = st.select_slider("Savollar soni", [10, 20, 30, 50], 20, key="exam_n")
             if S.ex is None:
                 if st.button("🎓 Imtihonni boshlash", type="primary", key="exam_start"):
-                    S.ex = dict(qs=[gen(random.choice(list(MODES))) for _ in range(N)], i=0, ok=0, bad=[]); st.rerun()
+                    S.ex = dict(qs=[gen(random.choice(list(MODES))) for _ in range(N)], i=0, ok=0, bad=[])
+                    st.rerun()
             else:
                 e = S.ex
                 if e["i"] >= len(e["qs"]):
-                    pc = round(100 * e["ok"] / len(e["qs"])); st.metric("Natija", f"{pc}%", f"{e['ok']}/{len(e['qs'])}")
-                    st.success("A'lo! 🏆") if pc >= 85 else st.warning("Yana takrorlang 💪")
-                    for d in e["bad"]: st.markdown(card(d), unsafe_allow_html=True)
+                    pc = round(100 * e["ok"] / len(e["qs"]))
+                    st.metric("Natija", f"{pc}%", f"{e['ok']}/{len(e['qs'])}")
+                    if pc >= 85:
+                        st.success("A'lo! 🏆")
+                    else:
+                        st.warning("Yana takrorlang 💪")
+                    for d in e["bad"]:
+                        st.markdown(card(d), unsafe_allow_html=True)
                     if not e.get("saved"):
-                        P["hist"].append({"sana": today, "rejim": "Imtihon", "ball": pc}); save(); e["saved"] = True
-                    if st.button("Yangi imtihon", key="exam_new"): S.ex = None; st.rerun()
+                        P["hist"].append({"sana": today, "rejim": "Imtihon", "ball": pc})
+                        save()
+                        e["saved"] = True
+                    if st.button("Yangi imtihon", key="exam_new"):
+                        S.ex = None
+                        st.rerun()
                 else:
-                    q = e["qs"][e["i"]]; st.progress(e["i"] / len(e["qs"]), text=f"Savol {e['i'] + 1}/{len(e['qs'])}")
+                    q = e["qs"][e["i"]]
+                    st.progress(e["i"] / len(e["qs"]), text=f"Savol {e['i'] + 1}/{len(e['qs'])}")
                     st.markdown(f"<div class='q'>{q['q']}</div>", unsafe_allow_html=True)
                     for i, o in enumerate(q["op"]):
                         if st.button(o, key=f"e{e['i']}{i}", use_container_width=True):
-                            ok = o == q["ok"]; e["ok"] += ok; answer(ok, q["d"])
-                            if not ok: e["bad"].append(q["d"])
-                            e["i"] += 1; st.rerun()
+                            ok = o == q["ok"]
+                            e["ok"] += ok
+                            answer(ok, q["d"])
+                            if not ok:
+                                e["bad"].append(q["d"])
+                            e["i"] += 1
+                            st.rerun()
+
+        # ---- Xatolar ustida ----
         with t[5]:
             st.caption("Faqat 3-qutidan past (qiynalgan) hujjatlar chiqadi")
-            if quiz("w2", list(MODES), weak_pool()) and st.button("Keyingi ➡️", type="primary", key="nx"): S.Q["w2"] = None; st.rerun()
+            if quiz("w2", list(MODES), weak_pool()) and st.button("Keyingi ➡️", type="primary", key="nx"):
+                S.Q["w2"] = None
+                st.rerun()
 
     # ================= STATISTIKA =================
     elif S.page == PAGES[4]:
@@ -576,19 +673,24 @@ else:
             st.subheader("Tur bo'yicha o'zlashtirish, %")
             data = {t: round(100 * sum(learned(d) for d in DOCS if d["tur"] == t) / max(sum(d["tur"] == t for d in DOCS), 1))
                     for t in COL if any(d["tur"] == t for d in DOCS)}
-            if data: st.bar_chart(data)
+            if data:
+                st.bar_chart(data)
         with b:
             st.subheader("Yillar bo'yicha hujjatlar soni")
             yc = {}
-            for d in DOCS: yc[str(d["yil"])] = yc.get(str(d["yil"]), 0) + 1
+            for d in DOCS:
+                yc[str(d["yil"])] = yc.get(str(d["yil"]), 0) + 1
             st.bar_chart(dict(sorted(yc.items())))
         st.subheader("🏅 Yutuqlar")
         bd = [(lc >= 10, "🥉 10 ta hujjat"), (lc >= 30, "🥈 30 ta hujjat"), (lc >= 60, "🥇 60 ta hujjat"), (lc >= len(DOCS), "🏆 Hammasi!"),
               (P["xp"] >= 1000, "💎 1000 XP"), (any(h["ball"] >= 90 for h in P["hist"] if h["rejim"] == "Imtihon"), "🎓 Imtihon 90%+"), (len(P["days"]) >= 7, "📆 7 kun faol")]
         st.write(" · ".join(("✅ " if o else "🔒 ") + n for o, n in bd))
         st.subheader("😅 Eng qiyin 10 ta hujjat")
-        for d in sorted(DOCS, key=box)[:10]: st.markdown(card(d), unsafe_allow_html=True)
-        if P["hist"]: st.subheader("Natijalar tarixi"); st.dataframe(P["hist"][::-1], use_container_width=True)
+        for d in sorted(DOCS, key=box)[:10]:
+            st.markdown(card(d), unsafe_allow_html=True)
+        if P["hist"]:
+            st.subheader("Natijalar tarixi")
+            st.dataframe(P["hist"][::-1], use_container_width=True)
         st.download_button("⬇️ Progressni yuklab olish", json.dumps(P, ensure_ascii=False), f"progress_{S.user}.json")
         if st.button("🗑 Progressni tozalash"):
             S.P = empty_progress()
@@ -601,33 +703,51 @@ else:
         KEY = os.environ.get("GEMINI_API_KEY") or st.sidebar.text_input("Gemini API kaliti", type="password", help="Bepul kalitni aistudio.google.com dan oling")
         AN = load_analysis()
         d = st.selectbox("Hujjatni tanlang", DOCS, format_func=lambda x: f"{x['raqam']} — {short(x['mazmun'], 70)}")
-        st.markdown(card(d), unsafe_allow_html=True); linkbtn(d)
-        for k, v in doc_info(d).items(): st.write(f"**{k}:** {v}")
+        st.markdown(card(d), unsafe_allow_html=True)
+        linkbtn(d)
+        for k, v in doc_info(d).items():
+            st.write(f"**{k}:** {v}")
         a = AN.get(d["key"])
         if not a:
             st.info("Chuqur tahlil hali yo'q. U hujjatning lex.uz'dagi matniga asoslanib tayyorlanadi.")
             man = st.text_area("Matn olinmasa, hujjat matnini shu yerga qo'ying (ixtiyoriy)")
             if st.button("🧠 Chuqur tahlil qilish", type="primary"):
-                if not KEY: st.error("Yon panelda API kalitini kiriting.")
+                if not KEY:
+                    st.error("Yon panelda API kalitini kiriting.")
                 else:
                     with st.spinner("Hujjat o'qilmoqda..."):
-                        try: store_analysis(d["key"], analyze(d, KEY, man or None)); st.rerun()
-                        except Exception as e: st.error(f"Xato: {e}")
+                        try:
+                            store_analysis(d["key"], analyze(d, KEY, man or None))
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Xato: {e}")
         else:
-            if a.get("ogohlantirish"): st.warning(a["ogohlantirish"])
+            if a.get("ogohlantirish"):
+                st.warning(a["ogohlantirish"])
             L = {"nima_haqida": "📌 Nima haqida", "maqsad": "🎯 Maqsadi", "asosiy_qoidalar": "📋 Asosiy qoidalar", "kimlarga_tegishli": "👥 Kimlarga tegishli",
                  "amaliy_ahamiyat": "🛠 Amaliy ahamiyati", "muhim_raqamlar_muddatlar": "🔢 Muhim raqam va muddatlar", "boglangan_hujjatlar": "🔗 Bog'liq hujjatlar",
                  "xavf_va_nuanslar": "⚠️ Xavf va nuanslar", "yodlash_maslahati": "🧠 Yodlash maslahati"}
             for k, tt in L.items():
                 v = a.get(k)
-                if v: st.subheader(tt); [st.write("• " + str(x)) for x in v] if isinstance(v, list) else st.write(v)
-            if st.button("🔄 Qayta tahlil qilish", key="reanalyze") and KEY: store_analysis(d["key"], analyze(d, KEY)); st.rerun()
+                if v:
+                    st.subheader(tt)
+                    if isinstance(v, list):
+                        for x in v:
+                            st.write("• " + str(x))
+                    else:
+                        st.write(v)
+            if st.button("🔄 Qayta tahlil qilish", key="reanalyze") and KEY:
+                store_analysis(d["key"], analyze(d, KEY))
+                st.rerun()
         st.caption(f"Tahlil qilingan hujjatlar: {len(AN)}/{len(DOCS)}")
         if st.button("⚙️ Qolgan hujjatlarni ketma-ket tahlil qilish (uzoq davom etadi)", key="analyze_all") and KEY:
-            todo = [x for x in DOCS if x["key"] not in AN]; bar = st.progress(0)
+            todo = [x for x in DOCS if x["key"] not in AN]
+            bar = st.progress(0)
             for i, x in enumerate(todo, 1):
-                try: store_analysis(x["key"], analyze(x, KEY))
-                except Exception as e: st.warning(f"{x['raqam']}: {e}")
+                try:
+                    store_analysis(x["key"], analyze(x, KEY))
+                except Exception as e:
+                    st.warning(f"{x['raqam']}: {e}")
                 bar.progress(i / len(todo), text=f"{i}/{len(todo)} — {x['raqam']}")
             st.rerun()
 
@@ -641,9 +761,13 @@ else:
         sel = st.multiselect("Tahlilga olinadigan hujjatlar (avtomatik tanlanadi, o'zgartirishingiz mumkin)", DOCS, default=auto, format_func=lambda x: f"{x['raqam']} — {short(x['mazmun'], 60)}")
         st.caption(f"Chuqur tahlili tayyor hujjatlar: {sum(x['key'] in AN for x in sel)}/{len(sel)} — tahlil qancha ko'p bo'lsa, javob shuncha aniq.")
         if st.button("💡 Takliflar tayyorlash", type="primary", disabled=not (q and sel)):
-            if not KEY: st.error("Yon panelda API kalitini kiriting.")
+            if not KEY:
+                st.error("Yon panelda API kalitini kiriting.")
             else:
                 with st.spinner("Hujjatlar tahlil qilinmoqda..."):
-                    try: st.markdown(suggest(q, sel, AN, KEY))
-                    except Exception as e: st.error(f"Xato: {e}")
-        for x in sel: st.markdown(card(x), unsafe_allow_html=True)
+                    try:
+                        st.markdown(suggest(q, sel, AN, KEY))
+                    except Exception as e:
+                        st.error(f"Xato: {e}")
+        for x in sel:
+            st.markdown(card(x), unsafe_allow_html=True)
