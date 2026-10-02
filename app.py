@@ -5,7 +5,7 @@ import os
 import requests
 from html.parser import HTMLParser
 
-st.set_page_config(page_title="HujjatUstasi", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Customs Laws", page_icon="⚖️", layout="wide")
 B = pathlib.Path(__file__).parent
 DF = B / "documents.json"
 PF = B / "progress.json"
@@ -220,7 +220,7 @@ def linkbtn(d):
 # ============================================================
 # SIDEBAR: FOYDALANUVCHI / ADMIN TANLOVI
 # ============================================================
-st.sidebar.title("⚖️ HujjatUstasi")
+st.sidebar.title("⚖️ Customs Laws")
 S.section = st.sidebar.radio("Kirish turi", ["👥 Foydalanuvchi", "🔑 Admin"],
                               index=["👥 Foydalanuvchi", "🔑 Admin"].index(S.section))
 
@@ -408,7 +408,7 @@ else:
 
     # ================= BOSH SAHIFA =================
     if S.page == PAGES[0]:
-        st.markdown("<div class='hero'><h1>⚖️ HujjatUstasi</h1><p>Normativ-huquqiy hujjatlarni o'ynab, oson va tez yodlang</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='hero'><h1>⚖️ Customs Laws</h1><p>Normativ-huquqiy hujjatlarni o'ynab, oson va tez yodlang</p></div>", unsafe_allow_html=True)
         n = P["days"].get(today, 0)
         c = st.columns(4)
         for col, (v, l) in zip(c, [(len(DOCS), "Jami hujjat"), (lc, "O'zlashtirilgan"), (f"{n}/20", "Bugungi maqsad"), (level(), "Daraja")]):
